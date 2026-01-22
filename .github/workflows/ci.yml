@@ -27,7 +27,7 @@ jobs:
 
       - name: Lint (flake8)
         run: |
-          flake8 api_app tests --max-line-length=100
+          flake8 api_app tests
 
       - name: Run tests (pytest)
         run: |

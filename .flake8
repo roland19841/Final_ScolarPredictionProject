@@ -1,0 +1,13 @@
+#flake permet d'analyse le code lors de l'envoi sur Github. C'est un outil de vérification / tests des imports et autre risque de bug sur le code
+# ce fichier va permettre d'affiner ses vérifications 
+# Il est lancé à chaque push normalement (voir le fichier CI), ce fichier est automatiquement pris en compte lors du run de flake8
+[flake8]
+max-line-length = 120
+extend-ignore = E203, W503
+exclude =
+    .venv,
+    __pycache__,
+    mlruns,
+    artifacts,
+    logs,
+    .pytest_cache
