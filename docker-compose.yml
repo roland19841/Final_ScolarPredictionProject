@@ -10,7 +10,7 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      # =======================================================
+      # ===========================================a============
       # Volumes persistants (sur ta machine)
       # - artifacts : modèles + contrat features
       # - logs      : inference_log.jsonl

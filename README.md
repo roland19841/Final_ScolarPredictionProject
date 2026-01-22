@@ -1,237 +1,193 @@
-# 🎓 School Success Prediction — Industrialized ML Project
+# 🎓 Prédiction de la Réussite Scolaire — Phase d’industrialisation
 
-## 📌 Overview
+## 🚀 Cas d'usage standard en local
 
-This project delivers an **end-to-end industrialized Machine Learning application** for predicting student success.
-It demonstrates the full lifecycle of a data product:
+Cette section décrit **le scénario de démonstration standard** permettant de présenter l’application de bout en bout.
 
-- Model training and evaluation
-- Model versioning and tracking
-- REST API for inference
-- Web-based user interface
-- Observability and monitoring
-- Reproducible deployment with Docker
+### 1️⃣ Lancement de l’application (Docker recommandé)
 
-The project is aligned with **MLOps best practices** and suitable for an academic or professional evaluation.
-
----
-
-## 🧠 Use Case
-
-Predict whether a student is likely to **succeed or fail** based on socio‑educational indicators  
-(using **Scenario 3** from the *Student Performance* dataset).
-
-- Target: binary success indicator
-- Prediction returned with probability
-- Scenario 3 excludes final grade (G3) from inputs
-
----
-
-## 🧩 Technical Stack
-
-| Layer | Technology |
-|-----|-----------|
-| API | FastAPI |
-| IHM | Streamlit |
-| ML | scikit-learn |
-| Tracking | MLflow |
-| Serialization | joblib |
-| Containerization | Docker / Docker Compose |
-| Language | Python 3.11 |
-
----
-
-## 📂 Project Structure
-
-```
-SCOLAR_PREDICTION_PROJECT/
-├── api_app/                # FastAPI application
-│   ├── main.py
-│   ├── Dockerfile
-│   └── requirements.txt
-│
-├── ihm_app/                # Streamlit interface
-│   ├── app.py
-│   ├── Dockerfile
-│   └── requirements.txt
-│
-├── artifacts/              # ML artifacts
-│   ├── scenario3_features.json
-│   └── models/
-│
-├── logs/                   # Inference logs (JSONL)
-│
-├── mlruns/                 # MLflow runs (file store)
-│
-├── data/                   # Datasets (CSV)
-│
-├── docker-compose.yml
-├── .dockerignore
-├── .gitignore
-└── README.md
-```
-
----
-
-## ⚙️ Installation & Execution
-
-### Option 1 — Run locally (without Docker)
-
-#### 1. Create virtual environment
-```bash
-python -m venv .venv
-source .venv/bin/activate   # Linux / Mac
-.venv\Scripts\activate    # Windows
-```
-
-#### 2. Install dependencies
-```bash
-pip install -r api_app/requirements.txt
-pip install -r ihm_app/requirements.txt
-```
-
-#### 3. Start the API
-```bash
-uvicorn api_app.main:app --reload --port 8000
-```
-
-#### 4. Start the IHM
-```bash
-streamlit run ihm_app/app.py
-```
-
-#### 5. (Optional) Start MLflow UI
-```bash
-mlflow ui --port 5000
-```
-
-Access:
-- API docs: http://localhost:8000/docs
-- IHM: http://localhost:8501
-- MLflow UI: http://localhost:5000
-
----
-
-### Option 2 — Run with Docker (recommended)
-
-This is the **preferred method** for evaluation.
-
-#### Prerequisites
+Prérequis :
 - Docker
 - Docker Compose
 
-#### 1. Build & start all services
+Depuis la racine du projet :
+
 ```bash
 docker compose up --build
 ```
 
-#### 2. Access services
-- IHM (Streamlit): http://localhost:8501
-- API (FastAPI Swagger): http://localhost:8000/docs
-- MLflow UI: http://localhost:5000
+Tous les services sont alors démarrés automatiquement.
 
-Everything runs with **one command**, no Python installation required.
+### 2️⃣ Accès aux interfaces
+
+- **Interface utilisateur (IHM Streamlit)**  
+  👉 http://localhost:8501  
+
+- **API FastAPI (Swagger)**  
+  👉 http://localhost:8000/docs  
+
+- **MLflow (suivi des entraînements)**  
+  👉 http://localhost:5000  
+
+- **Prometheus (collecte des métriques)**  
+  👉 http://localhost:9090  
+
+- **Grafana (dashboards & visualisation)**  
+  👉 http://localhost:3000  
+  *Identifiants par défaut (si non modifiés) :* `admin` / `admin`
+
+- **Uptime Kuma (supervision disponibilité)**  
+  👉 http://localhost:3001  
+---
+
+### 3️⃣ Vérification de la santé de l’API
+
+Dans Swagger :
+- Appeler `GET /health`
+- Vérifier :
+  - API active
+  - modèle chargé
+  - uptime
+  - métriques du dernier entraînement
+
+➡️ Objectif : montrer que l’API est **monitorée et opérationnelle**.
 
 ---
 
-## 🔁 Machine Learning Workflow
+### 4️⃣ Entraînement du modèle (endpoint /train)
 
-### Training (`POST /train`)
-- Loads dataset from `data/`
-- Performs train/test split + cross-validation
-- Computes accuracy and F1-score
-- Trains final model on full dataset
-- Saves:
-  - Versioned model
-  - Training report (`train_report.json`)
-- Logs run in MLflow (params, metrics, artifacts)
+Dans Swagger :
+- Appeler `POST /train`
+- (optionnel) spécifier un chemin de dataset
+- Observer :
+  - calcul des métriques
+  - sauvegarde du modèle
+  - création d’un run MLflow
 
-### Prediction (`POST /predict`)
-- Validates input features
-- Applies trained pipeline
-- Returns:
-  - Prediction (0 / 1)
-  - Probability of success
-- Logs inference in `logs/inference_log.jsonl`
+Dans MLflow :
+- ouvrir le run
+- montrer :
+  - paramètres
+  - métriques
+  - artefacts
 
----
-
-## 📊 MLflow Usage
-
-MLflow is used **only for training runs**, not for predictions.
-
-Each training:
-- Creates one MLflow run
-- Logs parameters, metrics, artifacts
-- Stores runs in `mlruns/` (file-based store)
-
-The MLflow UI allows:
-- Comparing experiments
-- Inspecting metrics
-- Downloading models and reports
+➡️ Objectif : démontrer le **réentraînement monitoré et traçable**.
 
 ---
 
-## 🧪 Monitoring & Observability
+### 5️⃣ Prédiction via l’IHM
 
-### `/health` endpoint
-Provides:
-- API status
-- Model loaded or not
-- Uptime
-- Last training metrics
-- Last inference event
+Dans l’IHM Streamlit :
+- renseigner les caractéristiques d’un élève
+- cliquer sur *Prédire*
+- observer :
+  - prédiction
+  - probabilité associée
 
-### Inference logs
-All predictions are logged in:
+➡️ Objectif : montrer l’usage **non technique** du modèle.
+
+---
+
+### 6️⃣ Traçabilité des prédictions
+
+Dans le dossier :
 ```
 logs/inference_log.jsonl
 ```
 
-Each line contains:
-- Timestamp
-- Endpoint
-- User ID
-- Input payload
-- Output prediction
+Montrer qu’une ligne est ajoutée à chaque prédiction :
+- inputs
+- outputs
+- timestamp
+- user_id
+
+➡️ Objectif : démontrer l’**auditabilité**.
 
 ---
 
-## 📄 Input Contract
+## 🧠 Présentation générale du projet
 
-The expected input features are defined in:
+Ce projet propose une **application de machine learning industrialisée** permettant de prédire la réussite scolaire d’un élève à partir de caractéristiques socio-éducatives (scénario 3 du dataset *Student Performance*).
+
+L’objectif n’est pas uniquement de produire un modèle performant, mais de démontrer la capacité à :
+- déployer un modèle sous forme de service
+- assurer sa traçabilité
+- garantir sa robustesse
+- automatiser son cycle de vie
+
+---
+
+## 🧩 Architecture globale
+
+La solution repose sur plusieurs composants indépendants :
+- **API FastAPI** : exposition du modèle, entraînement, prédiction
+- **IHM Streamlit** : interface utilisateur non technique
+- **MLflow** : suivi des entraînements
+- **Prometheus / Grafana / Uptime Kuma** : monitoring
+- **Docker** : déploiement reproductible
+- **GitHub Actions** : CI/CD
+
+---
+
+## 🔧 Stack technique
+
+| Couche | Technologie |
+|------|------------|
+| API | FastAPI |
+| IHM | Streamlit |
+| ML | scikit-learn |
+| Tracking | MLflow |
+| Monitoring | Prometheus, Grafana, Uptime Kuma |
+| CI/CD | GitHub Actions |
+| Conteneurisation | Docker / Docker Compose |
+| Langage | Python 3.11 |
+
+---
+
+## 📂 Structure du projet
+
 ```
-artifacts/scenario3_features.json
+SCOLAR_PREDICTION_PROJECT/
+├── api_app/                # API FastAPI
+├── ihm_app/                # Interface Streamlit
+├── artifacts/              # Modèles et features
+├── logs/                   # Logs d'inférence
+├── mlruns/                 # MLflow
+├── data/                   # Données CSV
+├── docker-compose.yml
+├── README.md
 ```
 
-This file is shared by:
-- API (validation)
-- IHM (form generation)
+---
 
-It guarantees **API–UI consistency**.
+## 🔁 Cycle de vie Machine Learning
+
+### Entraînement
+- déclenché via `/train`
+- validation croisée
+- métriques sauvegardées
+- modèle versionné
+
+### Prédiction
+- validation des entrées
+- inférence
+- journalisation automatique
 
 ---
 
-## ✅ Key Deliverables
+## 📌 Bonnes pratiques mises en œuvre
 
-- ✔ Industrialized ML pipeline
-- ✔ REST API with validation & monitoring
-- ✔ Web interface
-- ✔ MLflow experiment tracking
-- ✔ Dockerized deployment
-- ✔ Clean repository structure
-
----
-
-## 👤 Author
-
-Project developed as part of an **AI / IT Expert certification deliverable**.
+- séparation claire API / IHM
+- validation des données en plusieurs couches
+- versioning (Semantic Versioning)
+- CI/CD automatisée
+- monitoring applicatif
+- traçabilité des prédictions
 
 ---
 
-## 📎 Notes for Evaluation
+## 👤 Auteur
 
-- Use Docker for fastest evaluation
-- Train the model via Swagger or IHM
-- Inspect runs in MLflow UI
-- Check logs and artifacts for traceability
+Roland RENIER - Projet réalisé dans le cadre d’un **livrable de certification Expert IT / IA**.
+
+
