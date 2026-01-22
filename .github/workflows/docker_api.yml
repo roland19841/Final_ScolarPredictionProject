@@ -3,7 +3,13 @@ name: Docker - Build & Push API
 on:
   push:
     branches: [ "main" ]
-
+  # Déclenchement manuel depuis l'UI GitHub ("Run workflow")
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Branch or tag to build (ex: main, v1.0.0)"
+        required: false
+        default: "main"
 jobs:
   docker:
     runs-on: ubuntu-latest
@@ -11,6 +17,9 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          # Si lancement manuel, on checkout le ref choisi (branch/tag)
+          ref: ${{ github.event.inputs.ref || github.ref }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
