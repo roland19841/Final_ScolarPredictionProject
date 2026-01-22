@@ -1,0 +1,78 @@
+services:
+  api:
+    # =========================================================
+    # Service API FastAPI
+    # =========================================================
+    build:
+      context: .
+      dockerfile: api_app/Dockerfile
+    container_name: school_api
+    ports:
+      - "8000:8000"
+    volumes:
+      # =======================================================
+      # Volumes persistants (sur ta machine)
+      # - artifacts : modèles + contrat features
+      # - logs      : inference_log.jsonl
+      # - data      : dataset CSV pour /train
+      # - mlruns    : runs MLflow (file store)
+      # =======================================================
+      - ./artifacts:/app/artifacts
+      - ./logs:/app/logs
+      - ./data:/app/data
+      - ./mlruns:/app/mlruns
+    environment:
+      # =======================================================
+      # CORS : autoriser l'origine Streamlit côté navigateur
+      # (en local, l'IHM est visible sur http://localhost:8501)
+      # =======================================================
+      - CORS_ORIGINS=http://localhost:8501
+
+      # =======================================================
+      # MLflow : file store dans le container (persisté via volume)
+      # =======================================================
+      - MLFLOW_TRACKING_URI=file:/app/mlruns
+      - MLFLOW_EXPERIMENT_NAME=school-success-s3
+
+  ihm:
+    # =========================================================
+    # Service IHM Streamlit
+    # =========================================================
+    build:
+      context: .
+      dockerfile: ihm_app/Dockerfile
+    container_name: school_ihm
+    ports:
+      - "8501:8501"
+    depends_on:
+      - api
+    volumes:
+      # =======================================================
+      # L'IHM lit scenario3_features.json depuis artifacts/
+      # => on monte artifacts dans le container IHM aussi
+      # =======================================================
+      - ./artifacts:/app/artifacts
+    environment:
+      # =======================================================
+      # Très important : depuis le container, "localhost" != API
+      # => on utilise le nom du service docker : http://api:8000
+      # =======================================================
+      - API_URL=http://api:8000
+
+  mlflow:
+    # =========================================================
+    # Service MLflow UI (option A : file store)
+    # - Lit les runs depuis /mlruns (volume)
+    # - Affiche l'UI sur http://localhost:5000
+    # =========================================================
+    image: ghcr.io/mlflow/mlflow:v2.22.0
+    container_name: school_mlflow
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./mlruns:/mlruns
+    command: >
+      mlflow ui
+      --host 0.0.0.0
+      --port 5000
+      --backend-store-uri file:/mlruns
