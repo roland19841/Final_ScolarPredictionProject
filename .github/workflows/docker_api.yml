@@ -30,3 +30,4 @@ jobs:
           tags: |
             ${{ secrets.DOCKERHUB_USERNAME }}/school-success-api:latest
             ${{ secrets.DOCKERHUB_USERNAME }}/school-success-api:${{ github.sha }}
+            ${{ secrets.DOCKERHUB_USERNAME }}/school-success-api:${{ github.ref_name }}
