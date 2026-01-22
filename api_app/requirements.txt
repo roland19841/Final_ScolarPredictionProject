@@ -6,3 +6,5 @@ numpy
 joblib
 scikit-learn==1.7.2
 mlflow>=2.12,<3
+# --- Monitoring Prometheus ---
+prometheus-fastapi-instrumentator==7.0.0

@@ -1,0 +1,15 @@
+# monitoring/prometheus/prometheus.yml
+# Configuration Prometheus : liste des "targets" à scrapper (collecter).
+# Ici : on scrappe l'API FastAPI sur l'endpoint /metrics.
+
+global:
+  scrape_interval: 5s  # fréquence de collecte (5s pour démo ; 15s en prod)
+
+scrape_configs:
+  - job_name: "school-success-api"
+    metrics_path: /metrics
+    static_configs:
+      # IMPORTANT :
+      # Dans docker-compose, les services se joignent via leur nom.
+      # Ici, l'API doit s'appeler "api" dans docker-compose.
+      - targets: ["api:8000"]

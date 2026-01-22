@@ -32,6 +32,9 @@ import sklearn  # pour logger sklearn.__version__
 import mlflow  # ✅ MLflow tracking (runs, metrics, artifacts)
 import mlflow.sklearn  # ✅ logging modèle sklearn (optionnel)
 
+# --- Monitoring Prometheus : instrumentation FastAPI ---
+from prometheus_fastapi_instrumentator import Instrumentator
+
 # ============================================================
 # Configuration fichiers (artefacts & logs)
 # ============================================================
@@ -60,6 +63,19 @@ app = FastAPI(
     version="1.0.0",
     description="API de prédiction : Scenario 3 + Logistic Regression (sklearn pipeline).",
 )
+
+
+# ============================================================
+# Monitoring Prometheus : exposition /metrics
+# ============================================================
+
+# On instrumente l'API pour exporter des métriques Prometheus :
+# - nombre de requêtes
+# - latences
+# - codes HTTP (2xx/4xx/5xx)
+# Les métriques seront disponibles sur GET /metrics.
+Instrumentator().instrument(app).expose(app, endpoint="/metrics")
+
 
 # ============================================================
 # MLflow (tracking des entraînements)

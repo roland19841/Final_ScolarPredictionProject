@@ -1,0 +1,11 @@
+# monitoring/grafana/provisioning/datasources/datasource.yml
+# Provisioning automatique : Grafana aura Prometheus déjà configuré en source.
+
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090  # service Prometheus dans docker-compose
+    isDefault: true
