@@ -232,6 +232,7 @@ def validate_features(payload_data: Dict[str, Any], expected: list[str]) -> None
 # Scenario 3 : basé sur artifacts/scenario3_features.json
 # ============================================================
 
+
 def _to_int(value: Any) -> int:
     """
     Convertit une valeur en int de façon robuste.
@@ -386,6 +387,7 @@ def validate_and_clean_data_s3(data: Dict[str, Any]) -> Dict[str, Any]:
 # ============================================================
 # Chargement au démarrage (startup)
 # ============================================================
+
 
 @app.on_event("startup")
 def startup_load_artifacts() -> None:
@@ -637,7 +639,7 @@ def train(req: TrainRequest) -> TrainResponse:
     - remplace MODEL en mémoire
     - log JSONL
     """
-    global MODEL, EXPECTED_FEATURES, LAST_TRAIN_REPORT
+    global MODEL, LAST_TRAIN_REPORT
 
     # 1) Choix du dataset
     dataset_path = Path(req.dataset_path) if req.dataset_path else DATASET_DEFAULT_PATH
@@ -712,8 +714,8 @@ def train(req: TrainRequest) -> TrainResponse:
     ver_path = versioned_model_path(prefix="model_s3_logreg")
 
     try:
-        joblib.dump(final_pipe, ver_path)   # sauvegarde versionnée (historique)
-        joblib.dump(final_pipe, MODEL_PATH) # modèle "courant" (chemin stable)
+        joblib.dump(final_pipe, ver_path)    # sauvegarde versionnée (historique)
+        joblib.dump(final_pipe, MODEL_PATH)    # modèle "courant" (chemin stable)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to save model: {e}")
 
