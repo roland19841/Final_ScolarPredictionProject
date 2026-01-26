@@ -1,108 +1,113 @@
-# 🎓 Prédiction de la Réussite Scolaire — Phase d’industrialisation
+# 🎓 School Success Prediction – Industrialisation IA
 
-## 🚀 Cas d'usage standard en local
+## 🧱 Architecture locale (Docker)
+Tous les services sont orchestrés via **Docker Compose**.
 
-Cette section décrit **le scénario de démonstration standard** permettant de présenter l’application de bout en bout.
-
-### 1️⃣ Lancement de l’application (Docker recommandé)
-
-Prérequis :
-- Docker
-- Docker Compose
-
-Depuis la racine du projet :
-
-```bash
-docker compose up --build
+Ouvrir **Docker Desktop** et lancer la commande depuis un terminal :
+```
+docker compose up -d
 ```
 
-Tous les services sont alors démarrés automatiquement.
-
-### 2️⃣ Accès aux interfaces
-
-- **Interface utilisateur (IHM Streamlit)**  
-  👉 http://localhost:8501  
-
-- **API FastAPI (Swagger)**  
-  👉 http://localhost:8000/docs  
-
-- **MLflow (suivi des entraînements)**  
-  👉 http://localhost:5000  
-
-- **Prometheus (collecte des métriques)**  
-  👉 http://localhost:9090  
-
-- **Grafana (dashboards & visualisation)**  
-  👉 http://localhost:3000  
-  *Identifiants par défaut (si non modifiés) :* `admin` / `admin`
-
-- **Uptime Kuma (supervision disponibilité)**  
-  👉 http://localhost:3001  
 ---
 
-### 3️⃣ Vérification de la santé de l’API
+## 🖥️ Services et accès
 
-Dans Swagger :
-- Appeler `GET /health`
-- Vérifier :
-  - API active
-  - modèle chargé
-  - uptime
-  - métriques du dernier entraînement
-
-➡️ Objectif : montrer que l’API est **monitorée et opérationnelle**.
+| Composant | Rôle | URL |
+|---------|-----|-----|
+| IHM Streamlit | Interface utilisateur | http://localhost:8501 |
+| Swagger UI | Documentation API | http://localhost:8000/docs |
+| MLflow UI | Suivi des entraînements | http://localhost:5000 |
+| Adminer | Interface BDD | http://localhost:8080 |
+| Prometheus | Metrics | http://localhost:9090 |
+| Grafana | Dashboards | http://localhost:3000 |
+| Uptime Kuma | Disponibilité API | http://localhost:3001 |
 
 ---
 
-### 4️⃣ Entraînement du modèle (endpoint /train)
+## 🗄️ Base de données PostgreSQL
 
-Dans Swagger :
-- Appeler `POST /train`
-- (optionnel) spécifier un chemin de dataset
-- Observer :
-  - calcul des métriques
-  - sauvegarde du modèle
-  - création d’un run MLflow
+### 🎯 Objectif
+Remplacer la lecture directe d’un fichier CSV par une **base persistante**, plus proche d’un environnement de production.
 
-Dans MLflow :
-- ouvrir le run
-- montrer :
-  - paramètres
-  - métriques
-  - artefacts
+- La route `/train` lit désormais les données depuis PostgreSQL
+- Le CSV `student-final.csv` sert uniquement de **seed initial**
+- La base est inspectable via **Adminer**
 
-➡️ Objectif : démontrer le **réentraînement monitoré et traçable**.
+### 🔐 Connexion Adminer
 
----
-
-### 5️⃣ Prédiction via l’IHM
-
-Dans l’IHM Streamlit :
-- renseigner les caractéristiques d’un élève
-- cliquer sur *Prédire*
-- observer :
-  - prédiction
-  - probabilité associée
-
-➡️ Objectif : montrer l’usage **non technique** du modèle.
+| Champ | Valeur |
+|-----|-------|
+| Système | PostgreSQL |
+| Serveur | db |
+| Utilisateur | school_user |
+| Mot de passe | school_pwd |
+| Base de données | school |
 
 ---
 
-### 6️⃣ Traçabilité des prédictions
+## 🤖 API FastAPI
 
-Dans le dossier :
-```
-logs/inference_log.jsonl
-```
+### Routes principales
+- `POST /predict` : prédiction de réussite scolaire
+- `POST /train` : entraînement monitoré
+- `GET /health` : état de santé de l’API
+- `GET /metrics` : métriques Prometheus
 
-Montrer qu’une ligne est ajoutée à chaque prédiction :
-- inputs
-- outputs
-- timestamp
-- user_id
+### Fonctionnement
+- Validation des entrées avec **Pydantic**
+- Modèle chargé en mémoire au démarrage
+- Logs d’inférence en JSONL
+- Rechargement du modèle après `/train`
 
-➡️ Objectif : démontrer l’**auditabilité**.
+---
 
+## 📊 MLflow (MLOps)
+
+Chaque appel à `/train` :
+- crée un **run MLflow**
+- enregistre paramètres, métriques, artefacts
+- versionne le modèle
+
+MLflow permet :
+- comparaison des modèles
+- audit des entraînements
+- reproductibilité
+
+---
+
+## 📈 Monitoring
+
+- **Prometheus** scrappe `/metrics`
+- **Grafana** affiche latence, erreurs, trafic
+- **Uptime Kuma** surveille `/health`
+
+Objectif : observabilité sans outils cloud externes.
+
+---
+
+## 🔄 CI/CD (GitHub Actions)
+
+### Workflows
+- **CI** : tests (`pytest`) + lint (`flake8`)
+- **Docker** : build & push image API vers Docker Hub
+
+### Versioning
+- Tags Git `vX.Y.Z` (Semantic Versioning)
+- Le tag déclenche une image Docker du même nom
+
+---
+
+## 🧪 Démo orale type
+
+1. `docker compose up --build`
+2. Ouvrir Swagger → `/health`
+3. Lancer `/train`
+4. Montrer MLflow (nouveau run)
+5. Tester `/predict`
+6. Montrer Grafana / Kuma
+7. Accéder à Adminer
+
+---
 ---
 
 ## 🧠 Présentation générale du projet
@@ -188,6 +193,6 @@ SCOLAR_PREDICTION_PROJECT/
 
 ## 👤 Auteur
 
-Roland RENIER - Projet réalisé dans le cadre d’un **livrable de certification Expert IT / IA**.
+Roland RENIER - Projet réalisé dans le cadre d’un **livrable de certification Expert IT / IA de SIMPLON**.
 
 

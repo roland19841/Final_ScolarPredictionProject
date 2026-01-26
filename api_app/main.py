@@ -17,6 +17,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from pydantic import BaseModel, Field
 
+import os
 import sys
 import numpy as np
 
@@ -28,6 +29,9 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import StratifiedKFold, cross_val_score, train_test_split
 from sklearn.metrics import accuracy_score, f1_score
 import sklearn  # pour logger sklearn.__version__
+
+# BDD
+from sqlalchemy import create_engine
 
 import mlflow  # ✅ MLflow tracking (runs, metrics, artifacts)
 import mlflow.sklearn  # ✅ logging modèle sklearn (optionnel)
@@ -53,6 +57,14 @@ MODELS_DIR = Path("artifacts/models")
 # Rapport de training (dernière exécution)
 TRAIN_REPORT_PATH = Path("artifacts/train_report.json")
 
+# URL DB côté conteneur API (host = "db" car c'est le nom du service docker-compose)
+DATABASE_URL = os.getenv(
+    "DATABASE_URL",
+    "postgresql+psycopg2://school_user:school_pwd@db:5432/school",
+)
+
+# Engine SQLAlchemy réutilisable (évite de recréer une connexion à chaque call)
+DB_ENGINE = create_engine(DATABASE_URL)
 
 # ============================================================
 # Initialisation FastAPI
@@ -645,34 +657,48 @@ def predict(req: PredictRequest) -> PredictResponse:
 @app.post("/train", response_model=TrainResponse)
 def train(req: TrainRequest) -> TrainResponse:
     """
-    Entraînement monitoré :
-    - charge CSV
-    - crée target si besoin (G3 >= 10)
-    - split train/test + CV
-    - réentraîne final sur tout le dataset
-    - sauvegarde versionnée + modèle courant
-    - écrit report JSON
-    - remplace MODEL en mémoire
-    - log JSONL
+    Entraînement monitoré (source = PostgreSQL) :
+
+    - Lit le dataset depuis la table PostgreSQL `student_data`
+      (au lieu de lire un CSV local).
+    - Crée la cible binaire si besoin : target = (G3 >= 10)
+    - Évalue la robustesse :
+        * split train/test
+        * cross-validation stratifiée (accuracy, f1)
+    - Réentraîne un pipeline final sur tout le dataset
+    - Sauvegarde :
+        * un modèle versionné (historique)
+        * un modèle "courant" (chemin stable)
+    - Écrit un rapport JSON (train_report.json)
+    - Trace le run dans MLflow
+    - Recharge le modèle en mémoire (MODEL global)
+    - Journalise l’appel dans logs/inference_log.jsonl
     """
     global MODEL, LAST_TRAIN_REPORT
 
-    # 1) Choix du dataset
-    dataset_path = Path(req.dataset_path) if req.dataset_path else DATASET_DEFAULT_PATH
-    if not dataset_path.exists():
-        raise HTTPException(status_code=422, detail=f"Dataset not found: {dataset_path}")
-
-    # 2) Vérifier la liste de features attendues
+    # ----------------------------
+    # 1) Vérifier la liste de features attendues
+    # ----------------------------
     if not EXPECTED_FEATURES:
         raise HTTPException(status_code=500, detail="Expected features list is empty or missing.")
 
-    # 3) Charger les données
+    # ----------------------------
+    # 2) Charger les données depuis PostgreSQL
+    # ----------------------------
+    # Remarque : on garde req.dataset_path pour compatibilité / affichage,
+    # mais la source principale devient la DB.
     try:
-        df = pd.read_csv(dataset_path)
+        df = pd.read_sql("SELECT * FROM student_data", con=DB_ENGINE)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to read dataset: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to read dataset from DB: {e}")
 
-    # 4) Créer la cible binaire si nécessaire
+    if df.empty:
+        raise HTTPException(status_code=422, detail="Training table 'student_data' is empty.")
+
+    # ----------------------------
+    # 3) Créer la cible binaire si nécessaire
+    # ----------------------------
+    # On accepte soit "target" déjà présent, soit "G3" pour le construire.
     if "target" not in df.columns:
         if "G3" not in df.columns:
             raise HTTPException(status_code=422, detail="Dataset must contain 'G3' (or already have 'target').")
@@ -680,28 +706,34 @@ def train(req: TrainRequest) -> TrainResponse:
 
     y = df["target"].copy()
 
-    # 5) Construire X (Scenario 3)
+    # ----------------------------
+    # 4) Construire X (Scenario 3)
+    # ----------------------------
     try:
         X = df[EXPECTED_FEATURES].copy()
     except Exception as e:
         raise HTTPException(status_code=422, detail=f"Dataset missing expected features: {e}")
 
-    # 6) Évaluation robustesse (split train/test + CV)
+    # ----------------------------
+    # 5) Évaluation robustesse : split train/test + CV
+    # ----------------------------
     X_tr, X_te, y_tr, y_te = train_test_split(
         X,
         y,
         test_size=0.2,
         random_state=42,
-        stratify=y,
+        stratify=y,  # conserve le ratio des classes
     )
 
+    # Pipeline (identique au notebook)
     pipe = build_s3_logreg_pipeline(X_tr)
 
+    # CV stratifiée
     cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
 
     try:
-        # NB : on appelle cross_val_score deux fois (accuracy + f1) — OK pour un examen,
-        # mais en prod on optimiserait (cross_validate) pour éviter de refitter deux fois.
+        # NB : on appelle cross_val_score 2 fois (accuracy + f1).
+        # Pour optimiser, on pourrait utiliser cross_validate (mais OK pour examen).
         cv_acc = float(np.mean(cross_val_score(pipe, X_tr, y_tr, cv=cv, scoring="accuracy")))
         cv_f1 = float(np.mean(cross_val_score(pipe, X_tr, y_tr, cv=cv, scoring="f1")))
     except Exception as e:
@@ -716,29 +748,36 @@ def train(req: TrainRequest) -> TrainResponse:
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Train/test evaluation failed: {e}")
 
-    # 7) Entraînement final sur tout le dataset
+    # ----------------------------
+    # 6) Entraînement final sur tout le dataset
+    # ----------------------------
     final_pipe = build_s3_logreg_pipeline(X)
     try:
         final_pipe.fit(X, y)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Final training failed: {e}")
 
-    # 8) Sauvegarde modèle (versioning + modèle courant)
+    # ----------------------------
+    # 7) Sauvegarde modèle (versioning + modèle courant)
+    # ----------------------------
     if MODEL_PATH.exists() and not req.force:
         raise HTTPException(status_code=409, detail="Model already exists. Use force=true to overwrite.")
 
     ver_path = versioned_model_path(prefix="model_s3_logreg")
 
     try:
-        joblib.dump(final_pipe, ver_path)    # sauvegarde versionnée (historique)
-        joblib.dump(final_pipe, MODEL_PATH)    # modèle "courant" (chemin stable)
+        joblib.dump(final_pipe, ver_path)   # modèle versionné (historique)
+        joblib.dump(final_pipe, MODEL_PATH) # modèle courant (chemin stable)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to save model: {e}")
 
-    # 9) Rapport d'entraînement (pour /health + audit)
+    # ----------------------------
+    # 8) Rapport d'entraînement (pour /health + audit)
+    # ----------------------------
     report = {
         "timestamp_utc": datetime.now(timezone.utc).isoformat(),
-        "dataset_used": str(dataset_path),
+        # dataset_used devient une info "logique" (source DB)
+        "dataset_used": "postgresql://.../school (table=student_data)",
         "scenario": "Scenario 3",
         "model": "LogisticRegression",
         "artifacts": {
@@ -760,82 +799,74 @@ def train(req: TrainRequest) -> TrainResponse:
         "env": {
             "python": sys.version,
             "sklearn": sklearn.__version__,
-        }
+        },
     }
 
+    # Écrire le report une seule fois
     save_train_report(report)
+    LAST_TRAIN_REPORT = report
 
     # ----------------------------
-    # 9bis) MLflow tracking (1 run par appel /train)
+    # 9) MLflow tracking (1 run par appel /train)
     # ----------------------------
-    # MLflow ne remplace PAS les logs JSONL :
-    # - JSONL = audit des appels (predict/train)
-    # - MLflow = suivi des entraînements (params/metrics/artifacts/modèles)
+    # MLflow = suivi des entraînements (params/metrics/artifacts/modèle)
+    # JSONL = audit des appels (predict/train)
     try:
         with mlflow.start_run(run_name=f"s3_logreg_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}"):
-            # --- Params : configuration d'entraînement (reproductibilité)
+            # Params
             mlflow.log_param("scenario", "Scenario 3")
             mlflow.log_param("model", "LogisticRegression")
-            mlflow.log_param("dataset_path", str(dataset_path))
+            mlflow.log_param("data_source", "postgres")
+            mlflow.log_param("table", "student_data")
             mlflow.log_param("test_size", 0.2)
             mlflow.log_param("cv_n_splits", 5)
             mlflow.log_param("random_state", 42)
             mlflow.log_param("force_overwrite", req.force)
 
-            # --- Info utile : dimensions
+            # Dimensions
             mlflow.log_param("n_rows", int(df.shape[0]))
             mlflow.log_param("n_features", int(X.shape[1]))
 
-            # --- Versions (utile pour debug compatibilité)
+            # Versions
             mlflow.log_param("python_version", sys.version)
             mlflow.log_param("sklearn_version", sklearn.__version__)
 
-            # --- Metrics : résultats de ton évaluation
+            # Metrics
             mlflow.log_metric("cv_accuracy", cv_acc)
             mlflow.log_metric("cv_f1", cv_f1)
             mlflow.log_metric("test_accuracy", test_acc)
             mlflow.log_metric("test_f1", test_f1)
 
-            # --- Artifacts : fichiers utiles pour audit / rendu
-            # On s'assure que le train_report est bien écrit avant de l'uploader
-            # (si tu appelles ce bloc après save_train_report, c'est parfait)
+            # Artifacts
             if TRAIN_REPORT_PATH.exists():
                 mlflow.log_artifact(str(TRAIN_REPORT_PATH), artifact_path="reports")
-
             if FEATURES_PATH.exists():
                 mlflow.log_artifact(str(FEATURES_PATH), artifact_path="contracts")
-
-            # --- Modèle : 2 options
-            # Option A (simple) : loguer le joblib versionné
             if ver_path.exists():
                 mlflow.log_artifact(str(ver_path), artifact_path="models_joblib")
 
-            # Option B (bonus) : loguer le modèle en format MLflow (plus “standard”)
-            # Cela permet plus tard de le recharger via mlflow.sklearn.load_model(...)
-            mlflow.sklearn.log_model(
-                sk_model=final_pipe,
-                artifact_path="model",
-            )
+            # Modèle au format MLflow (bonus, très standard)
+            mlflow.sklearn.log_model(sk_model=final_pipe, artifact_path="model")
 
-            # Tag : permet de filtrer facilement dans l'UI
+            # Tags utiles pour filtrer
             mlflow.set_tag("endpoint", "/train")
             mlflow.set_tag("project", "school-success-predictor")
     except Exception as e:
-        # En prod, on ne veut pas qu'un souci MLflow casse /train
-        # => on loggue (print) et on continue.
+        # En prod, on évite de casser /train si MLflow tombe
         print(f"⚠️ MLflow logging failed: {e}")
 
-    save_train_report(report)
-    LAST_TRAIN_REPORT = report
-
+    # ----------------------------
     # 10) Reload en mémoire (sans redémarrer l'API)
+    # ----------------------------
     MODEL = final_pipe
 
-    # 11) Log d'audit
+    # ----------------------------
+    # 11) Log d'audit JSONL
+    # ----------------------------
     log_event(
         endpoint="/train",
         user_id=None,
-        inputs={"dataset_path": str(dataset_path), "force": req.force},
+        inputs={"source": "postgres", "table": "student_data", "force": req.force},
         outputs={"status": "trained", "metrics": report["metrics"], "model_versioned": str(ver_path)},
     )
 

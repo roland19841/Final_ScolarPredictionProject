@@ -59,6 +59,27 @@ services:
       # =======================================================
       - API_URL=http://api:8000
 
+  db:
+    image: postgres:16
+    container_name: school-db
+    environment:
+      POSTGRES_DB: school
+      POSTGRES_USER: school_user
+      POSTGRES_PASSWORD: school_pwd
+    ports:
+      - "5432:5432"
+    volumes:
+      # Volume persistant = la table restera même après redémarrage des conteneurs
+      - pgdata:/var/lib/postgresql/data
+
+  adminer:
+    image: adminer
+    container_name: adminer
+    restart: always
+    ports:
+      - "8080:8080"
+
+
   mlflow:
     # =========================================================
     # Service MLflow UI (option A : file store)
@@ -125,3 +146,4 @@ services:
 volumes:
   grafana_data:
   uptime_kuma_data:
+  pgdata:
