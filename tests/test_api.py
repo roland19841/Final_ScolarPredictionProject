@@ -10,6 +10,7 @@ import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
 
+import os
 import api_app.main as main
 
 
@@ -34,13 +35,15 @@ class DummyModel:
         # proba classe0=0.2, classe1=0.8 (succès)
         return np.array([[0.2, 0.8]])
 
+
 @pytest.mark.skipif(
     os.getenv("CI", "").lower() == "true",
     reason=(
-        "Le endpoint /train dépend de PostgreSQL. "
-        "En CI GitHub Actions, la DB n'est pas disponible, on skip ce smoke test."
+        "L'endpoint /train dépend de PostgreSQL. "
+        "En CI GitHub Actions, la DB n'est pas disponible : test d'infra, pas unitaire."
     ),
 )
+
 
 @pytest.fixture()
 def client_with_dummy_model() -> TestClient:
@@ -151,17 +154,12 @@ def test_train_smoke(tmp_path: Path) -> None:
     """
     - Vérifier que l'endpoint répond correctement en environnement complet (local/Docker).
     - En CI, on SKIP car PostgreSQL n'est pas démarré (test d'infra, pas un test unitaire).
-    """
-    r = client.post("/train", json={"force": True})
-    assert r.status_code == 200
-    
-    """
-    Smoke test /train :
+    - Smoke test /train :
     - crée un petit dataset synthétique conforme scenario 3 + G3
     - lance /train avec dataset_path temporaire
-    - vérifie réponse 200
-
-    """
+    - vérifie réponse 200"""
+    r = client.post("/train", json={"force": True})
+    assert r.status_code == 200
     features = load_s3_features()
 
     # Dataset synthétique : il faut assez de lignes pour CV 5-fold + 2 classes
