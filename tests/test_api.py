@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import Any, Dict, List
 
@@ -10,7 +11,6 @@ import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
 
-import os
 import api_app.main as main
 
 
@@ -27,25 +27,16 @@ class DummyModel:
     On simule predict + predict_proba (format sklearn).
     """
 
-    def predict(self, X):  # noqa: N802 (signature sklearn-like)
+    def predict(self, X: Any) -> np.ndarray:  # noqa: N802 (signature sklearn-like)
         # Retourne toujours "1" (succès) pour rendre le test stable
         return np.array([1])
 
-    def predict_proba(self, X):  # noqa: N802
+    def predict_proba(self, X: Any) -> np.ndarray:  # noqa: N802
         # proba classe0=0.2, classe1=0.8 (succès)
         return np.array([[0.2, 0.8]])
 
 
-@pytest.mark.skipif(
-    os.getenv("CI", "").lower() == "true",
-    reason=(
-        "L'endpoint /train dépend de PostgreSQL. "
-        "En CI GitHub Actions, la DB n'est pas disponible : test d'infra, pas unitaire."
-    ),
-)
-
-
-@pytest.fixture()
+@pytest.fixture
 def client_with_dummy_model() -> TestClient:
     """
     Fixture : injecte EXPECTED_FEATURES + un modèle dummy
@@ -150,19 +141,20 @@ def test_predict_out_of_range_returns_422(client_with_dummy_model: TestClient) -
     assert "G1" in fields
 
 
-def test_train_smoke(tmp_path: Path) -> None:
+@pytest.mark.skipif(
+    os.getenv("CI", "").lower() == "true",
+    reason="Smoke test /train dépend de PostgreSQL (test d'infra, skip en CI)",
+)
+def test_train_smoke(tmp_path: Path, client: TestClient) -> None:
     """
-    - Vérifier que l'endpoint répond correctement en environnement complet (local/Docker).
-    - En CI, on SKIP car PostgreSQL n'est pas démarré (test d'infra, pas un test unitaire).
-    - Smoke test /train :
+    Smoke test /train (local/Docker uniquement) :
     - crée un petit dataset synthétique conforme scenario 3 + G3
     - lance /train avec dataset_path temporaire
-    - vérifie réponse 200"""
-    r = client.post("/train", json={"force": True})
-    assert r.status_code == 200
+    - vérifie une réponse 200
+    """
     features = load_s3_features()
 
-    # Dataset synthétique : il faut assez de lignes pour CV 5-fold + 2 classes
+    # Dataset synthétique : assez de lignes pour CV 5-fold + 2 classes
     n = 60
     X = pd.DataFrame([build_valid_payload(features) for _ in range(n)])
 
@@ -174,10 +166,9 @@ def test_train_smoke(tmp_path: Path) -> None:
     csv_path = tmp_path / "student_synth.csv"
     df.to_csv(csv_path, index=False)
 
-    # Important : s'assurer que l'API connaît les features attendues
+    # S'assurer que l'API connaît les features attendues
     main.EXPECTED_FEATURES = features
 
-    client = TestClient(main.app)
     r = client.post("/train", json={"dataset_path": str(csv_path), "force": True})
 
     assert r.status_code == 200
