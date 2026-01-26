@@ -17,7 +17,6 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from pydantic import BaseModel, Field
 
-import os
 import sys
 import numpy as np
 
@@ -767,7 +766,7 @@ def train(req: TrainRequest) -> TrainResponse:
 
     try:
         joblib.dump(final_pipe, ver_path)   # modèle versionné (historique)
-        joblib.dump(final_pipe, MODEL_PATH) # modèle courant (chemin stable)
+        joblib.dump(final_pipe, MODEL_PATH)  # modèle courant (chemin stable)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to save model: {e}")
 
